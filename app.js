@@ -1,5 +1,5 @@
 const API_BASE = window.API_BASE;
-const APP_VERSION = "2.0.3";
+const APP_VERSION = "2.1.0";
 const TOKEN_KEY = "ledger_token";
 const USER_KEY = "ledger_user";
 const POLL_INTERVAL_MS = 20000;
@@ -11,6 +11,7 @@ let pollTimer = null;
 let myTasks = [];
 let sharedTasks = [];
 let competitionTasks = [];
+let messages = [];
 
 let calYear, calMonth; // calMonth is 0-11
 let calSelectedDate = null;
@@ -105,7 +106,7 @@ document.getElementById("sidebar").addEventListener("click", (e) => {
   document.querySelectorAll(".side-tab").forEach((t) => t.classList.remove("active"));
   btn.classList.add("active");
   const view = btn.dataset.view;
-  ["my", "shared", "achievements", "calendar"].forEach((v) => {
+  ["my", "shared", "achievements", "calendar", "messages"].forEach((v) => {
     document.getElementById("view-" + v).classList.toggle("hidden", v !== view);
   });
 });
@@ -245,6 +246,7 @@ async function enterApp() {
   wireTaskForm(document.getElementById("my-task-form"), "personal");
   wireTaskForm(document.getElementById("shared-task-form"), "shared");
   wireTaskForm(document.getElementById("competition-task-form"), "competition");
+  wireChatForm();
 
   document.getElementById("cal-prev").addEventListener("click", () => changeMonth(-1));
   document.getElementById("cal-next").addEventListener("click", () => changeMonth(1));
@@ -257,14 +259,16 @@ async function enterApp() {
 
 async function loadAll() {
   try {
-    const [my, shared, comp] = await Promise.all([
+    const [my, shared, comp, msgs] = await Promise.all([
       api("/api/tasks?scope=personal"),
       api("/api/tasks?scope=shared"),
       api("/api/tasks?scope=competition"),
+      api("/api/messages"),
     ]);
     myTasks = my.tasks;
     sharedTasks = shared.tasks;
     competitionTasks = comp.tasks;
+    messages = msgs.messages;
   } catch (_) {
     return; // 一時的な通信エラーは無視して次回のポーリングに任せる
   }
@@ -274,6 +278,7 @@ async function loadAll() {
   renderCompetitionGroups();
   renderAchievements();
   renderCalendar();
+  renderChat();
 }
 
 // ---------- 自分のタスク ----------
@@ -429,6 +434,56 @@ function renderCompetitionGroups() {
   });
 }
 
+// ---------- メッセージ ----------
+function wireChatForm() {
+  const form = document.getElementById("chat-form");
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const input = document.getElementById("chat-input");
+    const text = input.value.trim();
+    if (!text) return;
+    input.disabled = true;
+    try {
+      await api("/api/messages", { method: "POST", body: { body: text } });
+      input.value = "";
+      await loadAll();
+    } catch (err) {
+      showGlobalError(err.message);
+    } finally {
+      input.disabled = false;
+      input.focus();
+    }
+  });
+}
+
+function renderChat() {
+  const container = document.getElementById("chat-messages");
+  if (!container) return;
+  const wasNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 60;
+
+  if (messages.length === 0) {
+    container.innerHTML = `<p class="empty-hint">まだメッセージはありません。最初のひとことを送ってみましょう。</p>`;
+    return;
+  }
+
+  container.innerHTML = messages
+    .map((m) => {
+      const mine = m.sender_id === currentUser.id;
+      return `
+    <div class="chat-bubble-row ${mine ? "mine" : "theirs"}">
+      ${mine ? "" : `<span class="chat-sender">${escapeHtml(m.sender_name)}</span>`}
+      <div class="chat-bubble">${escapeHtml(m.body)}</div>
+      <span class="chat-time">${formatDate(m.created_at)}</span>
+    </div>
+  `;
+    })
+    .join("");
+
+  if (wasNearBottom || messages.length <= 1) {
+    container.scrollTop = container.scrollHeight;
+  }
+}
+
 // ---------- 実績 ----------
 function renderAchievements() {
   const container = document.getElementById("achievement-racers");
@@ -506,8 +561,9 @@ function renderCalendar() {
 
   const tasksByDate = new Map();
   allDueTasks().forEach((t) => {
-    if (!tasksByDate.has(t.due_date)) tasksByDate.set(t.due_date, []);
-    tasksByDate.get(t.due_date).push(t);
+    const key = dueDatePart(t.due_date);
+    if (!tasksByDate.has(key)) tasksByDate.set(key, []);
+    tasksByDate.get(key).push(t);
   });
 
   const todayStr = new Date().toISOString().slice(0, 10);
@@ -548,22 +604,26 @@ function renderCalendarDayList() {
     list.innerHTML = "";
     return;
   }
-  const tasks = allDueTasks().filter((t) => t.due_date === calSelectedDate);
+  const tasks = allDueTasks()
+    .filter((t) => dueDatePart(t.due_date) === calSelectedDate)
+    .sort((a, b) => (a.due_date || "").localeCompare(b.due_date || ""));
   title.textContent = formatDueDate(calSelectedDate) + " の予定";
   if (tasks.length === 0) {
     list.innerHTML = `<p class="empty-hint">この日の予定はありません。</p>`;
     return;
   }
   list.innerHTML = tasks
-    .map(
-      (t) => `
+    .map((t) => {
+      const timePart = t.due_date && t.due_date.includes("T") ? t.due_date.split("T")[1] : "終日";
+      return `
     <div class="cal-task-row">
       <span class="tag">${escapeHtml(t.scopeLabel)}</span>
+      <span class="tag">${escapeHtml(timePart)}</span>
       <span class="cal-task-title">${escapeHtml(t.title)}</span>
       <span class="tag status-${t.status}">${STATUS_LABEL[t.status]}</span>
     </div>
-  `
-    )
+  `;
+    })
     .join("");
 }
 
@@ -576,8 +636,13 @@ function formatDate(iso) {
 
 function formatDueDate(dateStr) {
   if (!dateStr) return "";
-  const [y, m, d] = dateStr.split("-");
-  return `${Number(m)}/${Number(d)}`;
+  const [datePart, timePart] = dateStr.split("T");
+  const [y, m, d] = datePart.split("-");
+  return timePart ? `${Number(m)}/${Number(d)} ${timePart}` : `${Number(m)}/${Number(d)}`;
+}
+
+function dueDatePart(dateStr) {
+  return dateStr ? dateStr.split("T")[0] : dateStr;
 }
 
 function escapeHtml(str) {

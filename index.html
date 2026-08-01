@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>tasky — ふたりのタスク共有</title>
 <meta name="theme-color" content="#faf8f4" />
 <link rel="manifest" href="manifest.json" />
@@ -82,6 +82,9 @@
       <button class="side-tab" data-view="calendar">
         <span class="side-icon">📅</span><span>カレンダー</span>
       </button>
+      <button class="side-tab" data-view="messages">
+        <span class="side-icon">💬</span><span>メッセージ</span>
+      </button>
     </nav>
 
     <div class="content-area">
@@ -92,7 +95,7 @@
           <form id="my-task-form" class="task-form task-form-full">
             <input type="text" class="f-title" placeholder="新しい項目を記す…" required maxlength="120" />
             <input type="text" class="f-memo" placeholder="メモ（任意）" maxlength="240" />
-            <input type="date" class="f-due" title="期限" />
+            <input type="datetime-local" class="f-due" title="期限（日時）" />
             <select class="f-repeat" title="繰り返し">
               <option value="none">繰り返しなし</option>
               <option value="daily">毎日</option>
@@ -134,7 +137,7 @@
               <input type="text" class="f-title" placeholder="新しい項目を記す…" required maxlength="120" />
               <input type="text" class="f-memo" placeholder="メモ（任意）" maxlength="240" />
               <select class="f-assignee" id="shared-assignee"></select>
-              <input type="date" class="f-due" title="期限" />
+              <input type="datetime-local" class="f-due" title="期限（日時）" />
               <select class="f-repeat" title="繰り返し">
                 <option value="none">繰り返しなし</option>
                 <option value="daily">毎日</option>
@@ -167,7 +170,7 @@
             <form id="competition-task-form" class="task-form">
               <input type="text" class="f-title" placeholder="お題を記す…" required maxlength="120" />
               <input type="text" class="f-memo" placeholder="メモ（任意）" maxlength="240" />
-              <input type="date" class="f-due" title="期限" />
+              <input type="datetime-local" class="f-due" title="期限（日時）" />
               <select class="f-repeat" title="繰り返し">
                 <option value="none">繰り返しなし</option>
                 <option value="daily">毎日</option>
@@ -211,6 +214,17 @@
         <section class="ledger-card calendar-day-card">
           <h2 id="calendar-day-title" class="compete-title">日付を選んでください</h2>
           <div id="calendar-day-list" class="calendar-day-list"></div>
+        </section>
+      </main>
+
+      <!-- メッセージ -->
+      <main id="view-messages" class="task-view hidden">
+        <section class="ledger-card chat-card">
+          <div id="chat-messages" class="chat-messages"></div>
+          <form id="chat-form" class="chat-form">
+            <input type="text" id="chat-input" placeholder="メッセージを入力…" maxlength="1000" autocomplete="off" />
+            <button type="submit" class="btn primary">送信</button>
+          </form>
         </section>
       </main>
 
