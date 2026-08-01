@@ -1,4 +1,4 @@
-const CACHE_NAME = "tasky-cache-v2";
+const CACHE_NAME = "tasky-cache-v3";
 const SHELL_FILES = ["./", "./index.html", "./style.css", "./app.js", "./config.js", "./manifest.json"];
 
 self.addEventListener("install", (event) => {
@@ -18,11 +18,19 @@ self.addEventListener("activate", (event) => {
 });
 
 // オフライン時は最後にキャッシュしたページを返す（API通信はネットワーク優先）
+// 通常時はネットワークを優先し、取得できたら都度キャッシュを更新する。
+// こうしておくことで、キャッシュ名を変え忘れても新しいバージョンがすぐ反映される。
 self.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url);
   if (url.origin !== self.location.origin) return; // API呼び出しはそのまま素通し
   event.respondWith(
-    caches.match(event.request).then((cached) => cached || fetch(event.request))
+    fetch(event.request)
+      .then((res) => {
+        const resClone = res.clone();
+        caches.open(CACHE_NAME).then((cache) => cache.put(event.request, resClone));
+        return res;
+      })
+      .catch(() => caches.match(event.request))
   );
 });
 
