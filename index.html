@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>tasky</title>
-<meta name="theme-color" content="#10201f" />
+<title>tasky — ふたりのタスク共有</title>
+<meta name="theme-color" content="#faf8f4" />
 <link rel="manifest" href="manifest.json" />
 <link rel="icon" href="icons/icon-192.png" />
 <link rel="apple-touch-icon" href="icons/icon-192.png" />
@@ -67,39 +67,172 @@
     </div>
   </main>
 
-  <!-- 認証後: タスク台帳 -->
-  <main id="board-view" class="board-view hidden">
+  <!-- 認証後 -->
+  <div id="app-shell" class="app-shell hidden">
+    <nav class="sidebar" id="sidebar">
+      <button class="side-tab active" data-view="my">
+        <span class="side-icon">🙋</span><span>自分</span>
+      </button>
+      <button class="side-tab" data-view="shared">
+        <span class="side-icon">🤝</span><span>共通</span>
+      </button>
+      <button class="side-tab" data-view="achievements">
+        <span class="side-icon">🏆</span><span>実績</span>
+      </button>
+      <button class="side-tab" data-view="calendar">
+        <span class="side-icon">📅</span><span>カレンダー</span>
+      </button>
+    </nav>
 
-    <section class="ledger-card new-task-card">
-      <form id="task-form" class="task-form">
-        <input type="text" id="task-title" placeholder="新しい項目を記す…" required maxlength="120" />
-        <input type="text" id="task-memo" placeholder="メモ（任意）" maxlength="240" />
-        <select id="task-assignee"></select>
-        <button type="submit" class="btn primary">記入</button>
-      </form>
-    </section>
+    <div class="content-area">
 
-    <div class="columns" id="columns">
-      <section class="column" data-status="todo">
-        <h2 class="col-title"><span class="stamp todo-stamp">未着手</span></h2>
-        <div class="col-list" id="list-todo"></div>
-      </section>
-      <section class="column" data-status="doing">
-        <h2 class="col-title"><span class="stamp doing-stamp">進行中</span></h2>
-        <div class="col-list" id="list-doing"></div>
-      </section>
-      <section class="column" data-status="done">
-        <h2 class="col-title"><span class="stamp done-stamp">完了</span></h2>
-        <div class="col-list" id="list-done"></div>
-      </section>
+      <!-- 自分のタスク（非公開） -->
+      <main id="view-my" class="task-view">
+        <section class="ledger-card new-task-card">
+          <form id="my-task-form" class="task-form task-form-full">
+            <input type="text" class="f-title" placeholder="新しい項目を記す…" required maxlength="120" />
+            <input type="text" class="f-memo" placeholder="メモ（任意）" maxlength="240" />
+            <input type="date" class="f-due" title="期限" />
+            <select class="f-repeat" title="繰り返し">
+              <option value="none">繰り返しなし</option>
+              <option value="daily">毎日</option>
+              <option value="weekly">毎週</option>
+              <option value="monthly">毎月</option>
+            </select>
+            <label class="notify-check"><input type="checkbox" class="f-notify" />期限に通知</label>
+            <button type="submit" class="btn primary">記入</button>
+          </form>
+          <p class="hint">ここに記した内容は相手には見えません。</p>
+        </section>
+        <div class="columns">
+          <section class="column" data-status="todo">
+            <h2 class="col-title"><span class="stamp todo-stamp">未着手</span></h2>
+            <div class="col-list" id="list-my-todo"></div>
+          </section>
+          <section class="column" data-status="doing">
+            <h2 class="col-title"><span class="stamp doing-stamp">進行中</span></h2>
+            <div class="col-list" id="list-my-doing"></div>
+          </section>
+          <section class="column" data-status="done">
+            <h2 class="col-title"><span class="stamp done-stamp">完了</span></h2>
+            <div class="col-list" id="list-my-done"></div>
+          </section>
+        </div>
+        <p class="empty-hint hidden" id="my-empty-hint">まだ何もありません。上の欄から記入してください。</p>
+      </main>
+
+      <!-- 共通（サブタブ: 共通のタスク / 競争） -->
+      <main id="view-shared" class="task-view hidden">
+        <div class="subtabs">
+          <button class="subtab active" data-subview="shared-tasks">共通のタスク</button>
+          <button class="subtab" data-subview="competition">競争</button>
+        </div>
+
+        <div id="subview-shared-tasks" class="subview">
+          <section class="ledger-card new-task-card">
+            <form id="shared-task-form" class="task-form">
+              <input type="text" class="f-title" placeholder="新しい項目を記す…" required maxlength="120" />
+              <input type="text" class="f-memo" placeholder="メモ（任意）" maxlength="240" />
+              <select class="f-assignee" id="shared-assignee"></select>
+              <input type="date" class="f-due" title="期限" />
+              <select class="f-repeat" title="繰り返し">
+                <option value="none">繰り返しなし</option>
+                <option value="daily">毎日</option>
+                <option value="weekly">毎週</option>
+                <option value="monthly">毎月</option>
+              </select>
+              <label class="notify-check"><input type="checkbox" class="f-notify" />期限に通知</label>
+              <button type="submit" class="btn primary">記入</button>
+            </form>
+          </section>
+          <div class="columns">
+            <section class="column" data-status="todo">
+              <h2 class="col-title"><span class="stamp todo-stamp">未着手</span></h2>
+              <div class="col-list" id="list-shared-todo"></div>
+            </section>
+            <section class="column" data-status="doing">
+              <h2 class="col-title"><span class="stamp doing-stamp">進行中</span></h2>
+              <div class="col-list" id="list-shared-doing"></div>
+            </section>
+            <section class="column" data-status="done">
+              <h2 class="col-title"><span class="stamp done-stamp">完了</span></h2>
+              <div class="col-list" id="list-shared-done"></div>
+            </section>
+          </div>
+          <p class="empty-hint hidden" id="shared-empty-hint">まだ何も記されていません。</p>
+        </div>
+
+        <div id="subview-competition" class="subview hidden">
+          <section class="ledger-card new-task-card">
+            <form id="competition-task-form" class="task-form">
+              <input type="text" class="f-title" placeholder="お題を記す…" required maxlength="120" />
+              <input type="text" class="f-memo" placeholder="メモ（任意）" maxlength="240" />
+              <input type="date" class="f-due" title="期限" />
+              <select class="f-repeat" title="繰り返し">
+                <option value="none">繰り返しなし</option>
+                <option value="daily">毎日</option>
+                <option value="weekly">毎週</option>
+                <option value="monthly">毎月</option>
+              </select>
+              <label class="notify-check"><input type="checkbox" class="f-notify" checked />期限に通知</label>
+              <button type="submit" class="btn primary">2人分作成</button>
+            </form>
+            <p class="hint">追加すると、まったく同じお題が相手にも作られます。それぞれ自分の分だけ完了操作できます。期限を過ぎて未完了だと相手に通知が届きます。</p>
+          </section>
+          <div id="competition-groups" class="competition-groups"></div>
+          <p class="empty-hint hidden" id="competition-empty-hint">まだ競争タスクがありません。</p>
+        </div>
+      </main>
+
+      <!-- 実績 -->
+      <main id="view-achievements" class="task-view hidden">
+        <section class="ledger-card compete-card">
+          <h2 class="compete-title">実績</h2>
+          <p class="compete-sub">共通・競争タスクの完了数を比較できます</p>
+          <div id="achievement-racers" class="racers"></div>
+        </section>
+        <section class="ledger-card compete-card">
+          <h2 class="compete-title">自分の実績</h2>
+          <p class="compete-sub">非公開の個人タスクの完了数です（相手には件数も表示されません）</p>
+          <p id="my-personal-stats" class="personal-stats"></p>
+        </section>
+      </main>
+
+      <!-- カレンダー -->
+      <main id="view-calendar" class="task-view hidden">
+        <section class="ledger-card calendar-card">
+          <div class="calendar-header">
+            <button id="cal-prev" class="link-btn">← 前月</button>
+            <h2 id="cal-month-label" class="calendar-month"></h2>
+            <button id="cal-next" class="link-btn">次月 →</button>
+          </div>
+          <div id="calendar-grid" class="calendar-grid"></div>
+        </section>
+        <section class="ledger-card calendar-day-card">
+          <h2 id="calendar-day-title" class="compete-title">日付を選んでください</h2>
+          <div id="calendar-day-list" class="calendar-day-list"></div>
+        </section>
+      </main>
+
     </div>
-
-    <p id="empty-hint" class="empty-hint hidden">まだ何も記されていません。上の欄から最初の項目を記入してください。</p>
-  </main>
+  </div>
 
   <p id="global-error" class="global-error hidden"></p>
 
 </div>
+
+<template id="racer-row-template">
+  <div class="racer">
+    <div class="racer-head">
+      <span class="racer-name"></span>
+      <span class="racer-count"></span>
+    </div>
+    <div class="racer-track">
+      <div class="racer-fill"></div>
+    </div>
+    <div class="racer-sub"></div>
+  </div>
+</template>
 
 <template id="task-row-template">
   <article class="task-row">
@@ -108,6 +241,7 @@
       <p class="task-memo"></p>
       <div class="task-meta">
         <span class="tag assignee-tag"></span>
+        <span class="tag due-tag"></span>
         <span class="tag time-tag"></span>
       </div>
     </div>
@@ -119,6 +253,29 @@
       </select>
       <button class="icon-btn delete-btn" title="削除">削除</button>
     </div>
+  </article>
+</template>
+
+<template id="competition-group-template">
+  <article class="competition-card">
+    <div class="competition-head">
+      <p class="task-title"></p>
+      <p class="task-memo"></p>
+      <div class="task-meta">
+        <span class="tag due-tag"></span>
+      </div>
+    </div>
+    <div class="competition-rows">
+      <div class="competition-row">
+        <span class="racer-label me-label"></span>
+        <select class="status-select my-status"></select>
+      </div>
+      <div class="competition-row">
+        <span class="racer-label partner-label"></span>
+        <span class="status-badge partner-status"></span>
+      </div>
+    </div>
+    <button class="icon-btn delete-btn" title="自分の分を削除">自分の分を削除</button>
   </article>
 </template>
 
