@@ -140,7 +140,7 @@ body {
   font-family: var(--mono);
 }
 
-input, select {
+input, select, textarea {
   background: var(--surface-2);
   border: 1px solid var(--border);
   color: var(--text);
@@ -150,7 +150,7 @@ input, select {
   font-size: 0.95rem;
 }
 
-input:focus, select:focus, .btn:focus, .tab:focus, .link-btn:focus {
+input:focus, select:focus, textarea:focus, .btn:focus, .tab:focus, .link-btn:focus {
   outline: 2px solid var(--accent-2);
   outline-offset: 1px;
 }
@@ -730,8 +730,25 @@ input:focus, select:focus, .btn:focus, .tab:focus, .link-btn:focus {
   padding-top: 12px;
 }
 
-.chat-form input {
+.chat-form input,
+.chat-form textarea {
   flex: 1;
+}
+
+.chat-textarea {
+  resize: none;
+  line-height: 1.4;
+  max-height: 160px;
+  overflow-y: auto;
+  font-family: var(--sans);
+}
+
+.announce-textarea {
+  width: 100%;
+  flex: 1 1 100%;
+  resize: vertical;
+  line-height: 1.5;
+  font-family: var(--sans);
 }
 
 /* --- 完了済み非表示トグル --- */
@@ -835,4 +852,5 @@ input:focus, select:focus, .btn:focus, .tab:focus, .link-btn:focus {
   margin: 4px 0 0;
   font-size: 0.85rem;
   color: var(--text-muted);
+  white-space: pre-wrap;
 }

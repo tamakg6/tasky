@@ -228,7 +228,7 @@
         <section class="ledger-card chat-card">
           <div id="chat-messages" class="chat-messages"></div>
           <form id="chat-form" class="chat-form">
-            <input type="text" id="chat-input" placeholder="メッセージを入力…" maxlength="1000" autocomplete="off" />
+            <textarea id="chat-input" class="chat-textarea" placeholder="メッセージを入力…（Shift+Enterで改行）" maxlength="1000" rows="1"></textarea>
             <button type="submit" class="btn primary">送信</button>
           </form>
         </section>
@@ -243,7 +243,7 @@
 
         <section id="announce-form-card" class="ledger-card new-task-card hidden">
           <form id="announce-form" class="task-form">
-            <input type="text" id="announce-body" placeholder="運営からのお知らせを入力…" maxlength="500" required />
+            <textarea id="announce-body" class="announce-textarea" placeholder="運営からのお知らせを入力…" maxlength="500" rows="3" required></textarea>
             <button type="submit" class="btn primary">投稿</button>
           </form>
           <p class="hint">運営アカウントとして、両方のお知らせ（開発）タブに届きます。</p>

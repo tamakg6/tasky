@@ -1,5 +1,5 @@
 const API_BASE = window.API_BASE;
-const APP_VERSION = "2.4.0";
+const APP_VERSION = "2.4.1";
 const TOKEN_KEY = "ledger_token";
 const USER_KEY = "ledger_user";
 const POLL_INTERVAL_MS = 20000;
@@ -605,15 +605,30 @@ function wireAnnounceForm() {
 // ---------- メッセージ ----------
 function wireChatForm() {
   const form = document.getElementById("chat-form");
+  const input = document.getElementById("chat-input");
+
+  const autoResize = () => {
+    input.style.height = "auto";
+    input.style.height = Math.min(input.scrollHeight, 160) + "px";
+  };
+  input.addEventListener("input", autoResize);
+
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      form.requestSubmit();
+    }
+  });
+
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
-    const input = document.getElementById("chat-input");
     const text = input.value.trim();
     if (!text) return;
     input.disabled = true;
     try {
       await api("/api/messages", { method: "POST", body: { body: text } });
       input.value = "";
+      autoResize();
       await loadAll();
     } catch (err) {
       showGlobalError(err.message);
