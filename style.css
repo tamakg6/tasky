@@ -733,3 +733,35 @@ input:focus, select:focus, .btn:focus, .tab:focus, .link-btn:focus {
 .chat-form input {
   flex: 1;
 }
+
+/* --- 完了済み非表示トグル --- */
+.hide-done-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  margin: 10px 0 4px;
+  cursor: pointer;
+  width: fit-content;
+}
+
+.hide-done-toggle input { width: 16px; height: 16px; }
+
+/* --- タスクのインライン編集 --- */
+.task-row.editing .task-row-main {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.edit-row-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.edit-row-fields .edit-due { flex: 0 1 170px; }
+.edit-row-fields .edit-repeat { flex: 0 1 120px; }

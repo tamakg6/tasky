@@ -1,5 +1,5 @@
 const API_BASE = window.API_BASE;
-const APP_VERSION = "2.1.1";
+const APP_VERSION = "2.2.0";
 const TOKEN_KEY = "ledger_token";
 const USER_KEY = "ledger_user";
 const POLL_INTERVAL_MS = 20000;
@@ -15,6 +15,8 @@ let messages = [];
 
 let calYear, calMonth; // calMonth is 0-11
 let calSelectedDate = null;
+let editingTaskId = null;
+let statsData = null;
 
 const STATUS_LABEL = { todo: "未着手", doing: "進行中", done: "完了" };
 
@@ -247,6 +249,8 @@ async function enterApp() {
   wireTaskForm(document.getElementById("shared-task-form"), "shared");
   wireTaskForm(document.getElementById("competition-task-form"), "competition");
   wireChatForm();
+  wireHideDoneToggle("my-hide-done", "my-col-done", "hideDone_my");
+  wireHideDoneToggle("shared-hide-done", "shared-col-done", "hideDone_shared");
 
   document.getElementById("cal-prev").addEventListener("click", () => changeMonth(-1));
   document.getElementById("cal-next").addEventListener("click", () => changeMonth(1));
@@ -259,16 +263,18 @@ async function enterApp() {
 
 async function loadAll() {
   try {
-    const [my, shared, comp, msgs] = await Promise.all([
+    const [my, shared, comp, msgs, stats] = await Promise.all([
       api("/api/tasks?scope=personal"),
       api("/api/tasks?scope=shared"),
       api("/api/tasks?scope=competition"),
       api("/api/messages"),
+      api("/api/stats"),
     ]);
     myTasks = my.tasks;
     sharedTasks = shared.tasks;
     competitionTasks = comp.tasks;
     messages = msgs.messages;
+    statsData = stats;
   } catch (_) {
     return; // 一時的な通信エラーは無視して次回のポーリングに任せる
   }
@@ -279,6 +285,19 @@ async function loadAll() {
   renderAchievements();
   renderCalendar();
   renderChat();
+}
+
+// ---------- 完了済みを非表示 ----------
+function wireHideDoneToggle(checkboxId, columnId, storageKey) {
+  const checkbox = document.getElementById(checkboxId);
+  const column = document.getElementById(columnId);
+  const stored = localStorage.getItem(storageKey) === "1";
+  checkbox.checked = stored;
+  column.classList.toggle("hidden", stored);
+  checkbox.addEventListener("change", () => {
+    localStorage.setItem(storageKey, checkbox.checked ? "1" : "0");
+    column.classList.toggle("hidden", checkbox.checked);
+  });
 }
 
 // ---------- 自分のタスク ----------
@@ -306,6 +325,8 @@ function renderShared() {
 }
 
 function renderTask(task, opts = {}) {
+  if (task.id === editingTaskId) return renderTaskEditForm(task);
+
   const tpl = document.getElementById("task-row-template");
   const node = tpl.content.cloneNode(true);
   const row = node.querySelector(".task-row");
@@ -341,6 +362,13 @@ function renderTask(task, opts = {}) {
     }
   });
 
+  node.querySelector(".edit-btn").addEventListener("click", () => {
+    editingTaskId = task.id;
+    stopPolling();
+    renderMy();
+    renderShared();
+  });
+
   node.querySelector(".delete-btn").addEventListener("click", async () => {
     if (!confirm("この項目を削除しますか？")) return;
     try {
@@ -352,6 +380,62 @@ function renderTask(task, opts = {}) {
   });
 
   return node;
+}
+
+function renderTaskEditForm(task) {
+  const article = document.createElement("article");
+  article.className = "task-row editing";
+  article.innerHTML = `
+    <div class="task-row-main">
+      <input type="text" class="edit-title" maxlength="120" value="${escapeHtml(task.title)}" />
+      <input type="text" class="edit-memo" maxlength="240" placeholder="メモ（任意）" value="${escapeHtml(task.memo || "")}" />
+      <div class="edit-row-fields">
+        <input type="datetime-local" class="edit-due" value="${task.due_date || ""}" title="期限（日時）" />
+        <select class="edit-repeat">
+          <option value="none">繰り返しなし</option>
+          <option value="daily">毎日</option>
+          <option value="weekly">毎週</option>
+          <option value="monthly">毎月</option>
+        </select>
+        <label class="notify-check"><input type="checkbox" class="edit-notify" />期限に通知</label>
+      </div>
+    </div>
+    <div class="task-actions">
+      <button type="button" class="btn primary save-edit-btn">保存</button>
+      <button type="button" class="icon-btn cancel-edit-btn">キャンセル</button>
+    </div>
+  `;
+  article.querySelector(".edit-repeat").value = task.repeat_rule || "none";
+  article.querySelector(".edit-notify").checked = !!task.notify_due;
+
+  article.querySelector(".save-edit-btn").addEventListener("click", async () => {
+    const title = article.querySelector(".edit-title").value.trim();
+    if (!title) return;
+    const memo = article.querySelector(".edit-memo").value.trim();
+    const dueDate = article.querySelector(".edit-due").value || null;
+    const repeatRule = article.querySelector(".edit-repeat").value;
+    const notifyDue = article.querySelector(".edit-notify").checked;
+    try {
+      await api(`/api/tasks/${task.id}`, {
+        method: "PUT",
+        body: { title, memo, dueDate, repeatRule, notifyDue },
+      });
+      editingTaskId = null;
+      startPolling();
+      await loadAll();
+    } catch (err) {
+      showGlobalError(err.message);
+    }
+  });
+
+  article.querySelector(".cancel-edit-btn").addEventListener("click", () => {
+    editingTaskId = null;
+    startPolling();
+    renderMy();
+    renderShared();
+  });
+
+  return article;
 }
 
 // ---------- 競争タスク ----------
@@ -417,7 +501,8 @@ function renderCompetitionGroups() {
       partnerBadge.classList.add("status-" + partnerRow.status);
     } else {
       partnerLabel.textContent = "相手";
-      partnerBadge.textContent = "（未登録）";
+      partnerBadge.textContent = "完了・削除済み";
+      partnerBadge.classList.add("status-done");
     }
 
     node.querySelector(".delete-btn").addEventListener("click", async () => {
@@ -489,14 +574,20 @@ function renderAchievements() {
   const container = document.getElementById("achievement-racers");
   if (!container || !members.length) return;
 
-  const combined = [...sharedTasks, ...competitionTasks];
-  const doneCounts = new Map(members.map((m) => [m.id, 0]));
   const openCounts = new Map(members.map((m) => [m.id, 0]));
-  combined.forEach((t) => {
-    if (!t.assignee_id || !doneCounts.has(t.assignee_id)) return;
-    if (t.status === "done") doneCounts.set(t.assignee_id, doneCounts.get(t.assignee_id) + 1);
-    else openCounts.set(t.assignee_id, openCounts.get(t.assignee_id) + 1);
+  [...sharedTasks, ...competitionTasks].forEach((t) => {
+    if (!t.assignee_id || !openCounts.has(t.assignee_id) || t.status === "done") return;
+    openCounts.set(t.assignee_id, openCounts.get(t.assignee_id) + 1);
   });
+
+  const doneCounts = new Map(members.map((m) => [m.id, 0]));
+  if (statsData) {
+    statsData.doneLog.forEach((row) => {
+      if (doneCounts.has(row.assignee_id)) {
+        doneCounts.set(row.assignee_id, doneCounts.get(row.assignee_id) + row.c);
+      }
+    });
+  }
 
   const maxDone = Math.max(1, ...members.map((m) => doneCounts.get(m.id) || 0));
   const topScore = Math.max(...members.map((m) => doneCounts.get(m.id) || 0));
@@ -517,8 +608,8 @@ function renderAchievements() {
     container.appendChild(node);
   });
 
-  const doneP = myTasks.filter((t) => t.status === "done").length;
-  const openP = myTasks.length - doneP;
+  const doneP = statsData ? statsData.myPersonalDoneCount : myTasks.filter((t) => t.status === "done").length;
+  const openP = myTasks.filter((t) => t.status !== "done").length;
   document.getElementById("my-personal-stats").textContent = `完了 ${doneP}件 ・ 対応中/未着手 ${openP}件`;
 }
 

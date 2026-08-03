@@ -107,16 +107,17 @@
           </form>
           <p class="hint">ここに記した内容は相手には見えません。</p>
         </section>
+        <label class="hide-done-toggle"><input type="checkbox" id="my-hide-done" />完了済みを非表示にする</label>
         <div class="columns">
-          <section class="column" data-status="todo">
+          <section class="column" data-status="todo" id="my-col-todo">
             <h2 class="col-title"><span class="stamp todo-stamp">未着手</span></h2>
             <div class="col-list" id="list-my-todo"></div>
           </section>
-          <section class="column" data-status="doing">
+          <section class="column" data-status="doing" id="my-col-doing">
             <h2 class="col-title"><span class="stamp doing-stamp">進行中</span></h2>
             <div class="col-list" id="list-my-doing"></div>
           </section>
-          <section class="column" data-status="done">
+          <section class="column" data-status="done" id="my-col-done">
             <h2 class="col-title"><span class="stamp done-stamp">完了</span></h2>
             <div class="col-list" id="list-my-done"></div>
           </section>
@@ -148,16 +149,17 @@
               <button type="submit" class="btn primary">記入</button>
             </form>
           </section>
+          <label class="hide-done-toggle"><input type="checkbox" id="shared-hide-done" />完了済みを非表示にする</label>
           <div class="columns">
-            <section class="column" data-status="todo">
+            <section class="column" data-status="todo" id="shared-col-todo">
               <h2 class="col-title"><span class="stamp todo-stamp">未着手</span></h2>
               <div class="col-list" id="list-shared-todo"></div>
             </section>
-            <section class="column" data-status="doing">
+            <section class="column" data-status="doing" id="shared-col-doing">
               <h2 class="col-title"><span class="stamp doing-stamp">進行中</span></h2>
               <div class="col-list" id="list-shared-doing"></div>
             </section>
-            <section class="column" data-status="done">
+            <section class="column" data-status="done" id="shared-col-done">
               <h2 class="col-title"><span class="stamp done-stamp">完了</span></h2>
               <div class="col-list" id="list-shared-done"></div>
             </section>
@@ -265,6 +267,7 @@
         <option value="doing">進行中</option>
         <option value="done">完了</option>
       </select>
+      <button class="icon-btn edit-btn" title="編集">編集</button>
       <button class="icon-btn delete-btn" title="削除">削除</button>
     </div>
   </article>
