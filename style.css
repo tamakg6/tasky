@@ -765,3 +765,74 @@ input:focus, select:focus, .btn:focus, .tab:focus, .link-btn:focus {
 
 .edit-row-fields .edit-due { flex: 0 1 170px; }
 .edit-row-fields .edit-repeat { flex: 0 1 120px; }
+
+/* --- サイドバーの未読バッジ --- */
+.side-tab {
+  position: relative;
+}
+
+.notif-badge {
+  position: absolute;
+  top: 4px;
+  right: 10px;
+  background: var(--danger);
+  color: #fff;
+  font-family: var(--mono);
+  font-size: 0.62rem;
+  line-height: 1;
+  padding: 2px 5px;
+  border-radius: 999px;
+  min-width: 14px;
+  text-align: center;
+}
+
+@media (max-width: 720px) {
+  .notif-badge { top: 2px; right: 14%; }
+}
+
+/* --- お知らせ --- */
+.notif-card { padding: 20px; }
+
+.notif-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.notif-row {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 14px;
+  background: var(--surface);
+}
+
+.notif-row.unread {
+  border-left: 3px solid var(--accent);
+  background: var(--surface-2);
+}
+
+.notif-row-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.notif-title {
+  font-family: var(--serif);
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.notif-time {
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.notif-body {
+  margin: 4px 0 0;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}

@@ -85,6 +85,10 @@
       <button class="side-tab" data-view="messages">
         <span class="side-icon">💬</span><span>メッセージ</span>
       </button>
+      <button class="side-tab" data-view="notifications">
+        <span class="side-icon">🔔</span><span>お知らせ</span>
+        <span id="notif-badge" class="notif-badge hidden">0</span>
+      </button>
     </nav>
 
     <div class="content-area">
@@ -227,6 +231,28 @@
             <input type="text" id="chat-input" placeholder="メッセージを入力…" maxlength="1000" autocomplete="off" />
             <button type="submit" class="btn primary">送信</button>
           </form>
+        </section>
+      </main>
+
+      <!-- お知らせ -->
+      <main id="view-notifications" class="task-view hidden">
+        <div class="subtabs">
+          <button class="subtab active" data-notif-tab="personal">個人</button>
+          <button class="subtab" data-notif-tab="announcement">開発</button>
+        </div>
+
+        <section id="announce-form-card" class="ledger-card new-task-card hidden">
+          <form id="announce-form" class="task-form">
+            <input type="text" id="announce-body" placeholder="運営からのお知らせを入力…" maxlength="500" required />
+            <button type="submit" class="btn primary">投稿</button>
+          </form>
+          <p class="hint">運営アカウントとして、両方のお知らせ（開発）タブに届きます。</p>
+        </section>
+
+        <section class="ledger-card notif-card">
+          <div id="notif-list-personal" class="notif-list"></div>
+          <div id="notif-list-announcement" class="notif-list hidden"></div>
+          <p class="empty-hint hidden" id="notif-empty-hint">まだお知らせはありません。</p>
         </section>
       </main>
 

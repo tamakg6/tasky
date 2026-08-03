@@ -1,5 +1,5 @@
 const API_BASE = window.API_BASE;
-const APP_VERSION = "2.2.0";
+const APP_VERSION = "2.4.0";
 const TOKEN_KEY = "ledger_token";
 const USER_KEY = "ledger_user";
 const POLL_INTERVAL_MS = 20000;
@@ -12,6 +12,8 @@ let myTasks = [];
 let sharedTasks = [];
 let competitionTasks = [];
 let messages = [];
+let notifications = [];
+let unreadCount = 0;
 
 let calYear, calMonth; // calMonth is 0-11
 let calSelectedDate = null;
@@ -108,18 +110,29 @@ document.getElementById("sidebar").addEventListener("click", (e) => {
   document.querySelectorAll(".side-tab").forEach((t) => t.classList.remove("active"));
   btn.classList.add("active");
   const view = btn.dataset.view;
-  ["my", "shared", "achievements", "calendar", "messages"].forEach((v) => {
+  ["my", "shared", "achievements", "calendar", "messages", "notifications"].forEach((v) => {
     document.getElementById("view-" + v).classList.toggle("hidden", v !== view);
   });
+  if (view === "notifications") markNotificationsRead();
 });
 
-document.querySelectorAll(".subtab").forEach((tab) => {
+document.querySelectorAll(".subtab[data-subview]").forEach((tab) => {
   tab.addEventListener("click", () => {
-    document.querySelectorAll(".subtab").forEach((t) => t.classList.remove("active"));
+    document.querySelectorAll(".subtab[data-subview]").forEach((t) => t.classList.remove("active"));
     tab.classList.add("active");
     const sv = tab.dataset.subview;
     document.getElementById("subview-shared-tasks").classList.toggle("hidden", sv !== "shared-tasks");
     document.getElementById("subview-competition").classList.toggle("hidden", sv !== "competition");
+  });
+});
+
+document.querySelectorAll(".subtab[data-notif-tab]").forEach((tab) => {
+  tab.addEventListener("click", () => {
+    document.querySelectorAll(".subtab[data-notif-tab]").forEach((t) => t.classList.remove("active"));
+    tab.classList.add("active");
+    const nt = tab.dataset.notifTab;
+    document.getElementById("notif-list-personal").classList.toggle("hidden", nt !== "personal");
+    document.getElementById("notif-list-announcement").classList.toggle("hidden", nt !== "announcement");
   });
 });
 
@@ -249,6 +262,7 @@ async function enterApp() {
   wireTaskForm(document.getElementById("shared-task-form"), "shared");
   wireTaskForm(document.getElementById("competition-task-form"), "competition");
   wireChatForm();
+  wireAnnounceForm();
   wireHideDoneToggle("my-hide-done", "my-col-done", "hideDone_my");
   wireHideDoneToggle("shared-hide-done", "shared-col-done", "hideDone_shared");
 
@@ -263,18 +277,21 @@ async function enterApp() {
 
 async function loadAll() {
   try {
-    const [my, shared, comp, msgs, stats] = await Promise.all([
+    const [my, shared, comp, msgs, stats, notifs] = await Promise.all([
       api("/api/tasks?scope=personal"),
       api("/api/tasks?scope=shared"),
       api("/api/tasks?scope=competition"),
       api("/api/messages"),
       api("/api/stats"),
+      api("/api/notifications"),
     ]);
     myTasks = my.tasks;
     sharedTasks = shared.tasks;
     competitionTasks = comp.tasks;
     messages = msgs.messages;
     statsData = stats;
+    notifications = notifs.notifications;
+    unreadCount = notifs.unreadCount;
   } catch (_) {
     return; // 一時的な通信エラーは無視して次回のポーリングに任せる
   }
@@ -285,6 +302,7 @@ async function loadAll() {
   renderAchievements();
   renderCalendar();
   renderChat();
+  renderNotifications();
 }
 
 // ---------- 完了済みを非表示 ----------
@@ -516,6 +534,71 @@ function renderCompetitionGroups() {
     });
 
     container.appendChild(node);
+  });
+}
+
+// ---------- お知らせ ----------
+function renderNotifications() {
+  const badge = document.getElementById("notif-badge");
+  badge.textContent = String(unreadCount);
+  badge.classList.toggle("hidden", unreadCount === 0);
+
+  const emptyHint = document.getElementById("notif-empty-hint");
+  emptyHint.classList.toggle("hidden", notifications.length > 0);
+
+  const buildRows = (items) =>
+    items
+      .map(
+        (n) => `
+    <div class="notif-row ${n.read_at ? "" : "unread"}">
+      <div class="notif-row-head">
+        <span class="notif-title">${escapeHtml(n.title.replace(/^tasky:\s*/, ""))}</span>
+        <span class="notif-time">${formatDate(n.created_at)}</span>
+      </div>
+      <p class="notif-body">${escapeHtml(n.body)}</p>
+    </div>
+  `
+      )
+      .join("");
+
+  document.getElementById("notif-list-personal").innerHTML = buildRows(
+    notifications.filter((n) => n.category !== "announcement")
+  );
+  document.getElementById("notif-list-announcement").innerHTML = buildRows(
+    notifications.filter((n) => n.category === "announcement")
+  );
+}
+
+async function markNotificationsRead() {
+  if (unreadCount === 0) return;
+  try {
+    await api("/api/notifications/read-all", { method: "POST" });
+    unreadCount = 0;
+    document.getElementById("notif-badge").classList.add("hidden");
+    notifications = notifications.map((n) => ({ ...n, read_at: n.read_at || new Date().toISOString() }));
+    renderNotifications();
+  } catch (_) {
+    // 次回のポーリングで再試行される
+  }
+}
+
+function wireAnnounceForm() {
+  const card = document.getElementById("announce-form-card");
+  card.classList.toggle("hidden", !currentUser.isAdmin);
+  if (!currentUser.isAdmin) return;
+  const form = document.getElementById("announce-form");
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const input = document.getElementById("announce-body");
+    const text = input.value.trim();
+    if (!text) return;
+    try {
+      await api("/api/announcements", { method: "POST", body: { body: text } });
+      input.value = "";
+      await loadAll();
+    } catch (err) {
+      showGlobalError(err.message);
+    }
   });
 }
 
