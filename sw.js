@@ -1,4 +1,4 @@
-const CACHE_NAME = "tasky-cache-v3";
+const CACHE_NAME = "tasky-cache-v4";
 const SHELL_FILES = ["./", "./index.html", "./style.css", "./app.js", "./config.js", "./manifest.json"];
 
 self.addEventListener("install", (event) => {

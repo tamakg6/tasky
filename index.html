@@ -227,7 +227,14 @@
       <main id="view-messages" class="task-view hidden">
         <section class="ledger-card chat-card">
           <div id="chat-messages" class="chat-messages"></div>
+          <div id="chat-image-preview" class="chat-image-preview hidden">
+            <img id="chat-image-preview-img" alt="送信する画像のプレビュー" />
+            <span>この画像を送ります</span>
+            <button type="button" id="chat-image-clear" class="link-btn">取り消し</button>
+          </div>
           <form id="chat-form" class="chat-form">
+            <button type="button" id="chat-attach-btn" class="btn chat-attach-btn" title="画像を送る">📷</button>
+            <input type="file" id="chat-image-input" accept="image/*" class="hidden" />
             <textarea id="chat-input" class="chat-textarea" placeholder="メッセージを入力…（Shift+Enterで改行）" maxlength="1000" rows="1"></textarea>
             <button type="submit" class="btn primary">送信</button>
           </form>

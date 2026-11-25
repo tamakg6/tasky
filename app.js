@@ -1,5 +1,5 @@
 const API_BASE = window.API_BASE;
-const APP_VERSION = "2.4.1";
+const APP_VERSION = "2.5.0";
 const TOKEN_KEY = "ledger_token";
 const USER_KEY = "ledger_user";
 const POLL_INTERVAL_MS = 20000;
@@ -12,6 +12,10 @@ let myTasks = [];
 let sharedTasks = [];
 let competitionTasks = [];
 let messages = [];
+let chatViewOpen = false;
+let chatHasRendered = false;
+let pendingChatImage = null; // 送信待ちの画像 (data URL)
+let markingMessagesRead = false;
 let notifications = [];
 let unreadCount = 0;
 
@@ -113,6 +117,14 @@ document.getElementById("sidebar").addEventListener("click", (e) => {
   ["my", "shared", "achievements", "calendar", "messages", "notifications"].forEach((v) => {
     document.getElementById("view-" + v).classList.toggle("hidden", v !== view);
   });
+  chatViewOpen = view === "messages";
+  if (chatViewOpen) {
+    // 非表示の間に描画されてもスクロールは効かないので、開いた瞬間に一番下へ移動する
+    requestAnimationFrame(() => {
+      scrollChatToBottom();
+      markMessagesRead();
+    });
+  }
   if (view === "notifications") markNotificationsRead();
 });
 
@@ -603,9 +615,16 @@ function wireAnnounceForm() {
 }
 
 // ---------- メッセージ ----------
+function scrollChatToBottom() {
+  const container = document.getElementById("chat-messages");
+  if (container) container.scrollTop = container.scrollHeight;
+}
+
 function wireChatForm() {
   const form = document.getElementById("chat-form");
   const input = document.getElementById("chat-input");
+  const attachBtn = document.getElementById("chat-attach-btn");
+  const fileInput = document.getElementById("chat-image-input");
 
   const autoResize = () => {
     input.style.height = "auto";
@@ -620,16 +639,44 @@ function wireChatForm() {
     }
   });
 
+  if (attachBtn && fileInput) {
+    attachBtn.addEventListener("click", () => fileInput.click());
+    fileInput.addEventListener("change", async () => {
+      const file = fileInput.files && fileInput.files[0];
+      fileInput.value = "";
+      if (!file) return;
+      if (!file.type.startsWith("image/")) {
+        showGlobalError("画像ファイルを選んでください");
+        return;
+      }
+      try {
+        pendingChatImage = await compressImageToDataUrl(file);
+        renderChatImagePreview();
+      } catch (_) {
+        showGlobalError("画像を読み込めませんでした");
+      }
+    });
+    document.getElementById("chat-image-clear").addEventListener("click", () => {
+      pendingChatImage = null;
+      renderChatImagePreview();
+    });
+  }
+
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
     const text = input.value.trim();
-    if (!text) return;
+    if (!text && !pendingChatImage) return;
     input.disabled = true;
     try {
-      await api("/api/messages", { method: "POST", body: { body: text } });
+      const body = { body: text };
+      if (pendingChatImage) body.image = pendingChatImage;
+      await api("/api/messages", { method: "POST", body });
       input.value = "";
+      pendingChatImage = null;
+      renderChatImagePreview();
       autoResize();
       await loadAll();
+      scrollChatToBottom();
     } catch (err) {
       showGlobalError(err.message);
     } finally {
@@ -639,10 +686,70 @@ function wireChatForm() {
   });
 }
 
+function renderChatImagePreview() {
+  const wrap = document.getElementById("chat-image-preview");
+  if (!wrap) return;
+  wrap.classList.toggle("hidden", !pendingChatImage);
+  if (pendingChatImage) {
+    document.getElementById("chat-image-preview-img").src = pendingChatImage;
+  }
+}
+
+// 画像を長辺1280px以下のJPEGに圧縮してdata URLにする (サーバー側の保存容量に収めるため)
+async function compressImageToDataUrl(file) {
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await new Promise((resolve, reject) => {
+      const el = new Image();
+      el.onload = () => resolve(el);
+      el.onerror = reject;
+      el.src = url;
+    });
+    const MAX = 1280;
+    const scale = Math.min(1, MAX / Math.max(img.naturalWidth, img.naturalHeight));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(img.naturalWidth * scale));
+    canvas.height = Math.max(1, Math.round(img.naturalHeight * scale));
+    const ctx = canvas.getContext("2d");
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    let dataUrl = canvas.toDataURL("image/jpeg", 0.82);
+    if (dataUrl.length > 900000) dataUrl = canvas.toDataURL("image/jpeg", 0.6);
+    if (dataUrl.length > 900000) throw new Error("too large");
+    return dataUrl;
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+// 相手のメッセージを既読にする (Worker未対応の間は静かに何もしない)
+async function markMessagesRead() {
+  if (markingMessagesRead || !currentUser) return;
+  // read_at を返さない古いWorkerでは呼ばない
+  if (!messages.some((m) => "read_at" in m)) return;
+  const hasUnread = messages.some((m) => m.sender_id !== currentUser.id && !m.read_at);
+  if (!hasUnread) return;
+  markingMessagesRead = true;
+  try {
+    await api("/api/messages/read-all", { method: "POST" });
+    const now = new Date().toISOString();
+    messages = messages.map((m) =>
+      m.sender_id !== currentUser.id && !m.read_at ? { ...m, read_at: now } : m
+    );
+  } catch (_) {
+    // 次回のポーリングで再試行される
+  } finally {
+    markingMessagesRead = false;
+  }
+}
+
 function renderChat() {
   const container = document.getElementById("chat-messages");
   if (!container) return;
   const wasNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 60;
+  const isFirstRender = !chatHasRendered;
+  chatHasRendered = true;
 
   if (messages.length === 0) {
     container.innerHTML = `<p class="empty-hint">まだメッセージはありません。最初のひとことを送ってみましょう。</p>`;
@@ -655,16 +762,21 @@ function renderChat() {
       return `
     <div class="chat-bubble-row ${mine ? "mine" : "theirs"}">
       ${mine ? "" : `<span class="chat-sender">${escapeHtml(m.sender_name)}</span>`}
-      <div class="chat-bubble">${escapeHtml(m.body)}</div>
-      <span class="chat-time">${formatDate(m.created_at)}</span>
+      ${m.image ? `<a href="${escapeHtml(m.image)}" target="_blank" rel="noopener"><img class="chat-image" src="${escapeHtml(m.image)}" alt="送信された画像" loading="lazy" /></a>` : ""}
+      ${m.body ? `<div class="chat-bubble">${escapeHtml(m.body)}</div>` : ""}
+      <span class="chat-time">${mine && m.read_at ? `<span class="chat-read">既読</span> ` : ""}${formatDate(m.created_at)}</span>
     </div>
   `;
     })
     .join("");
 
-  if (wasNearBottom || messages.length <= 1) {
-    container.scrollTop = container.scrollHeight;
+  if (wasNearBottom || isFirstRender || messages.length <= 1) {
+    // 画面が表示されている時だけ効く。非表示時はタブを開いた瞬間にスクロールする
+    scrollChatToBottom();
+    requestAnimationFrame(scrollChatToBottom);
   }
+
+  if (chatViewOpen) markMessagesRead();
 }
 
 // ---------- 実績 ----------
