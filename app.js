@@ -1,5 +1,5 @@
 const API_BASE = window.API_BASE;
-const APP_VERSION = "2.5.0";
+const APP_VERSION = "2.6.0";
 const TOKEN_KEY = "ledger_token";
 const USER_KEY = "ledger_user";
 const POLL_INTERVAL_MS = 20000;
@@ -12,6 +12,7 @@ let myTasks = [];
 let sharedTasks = [];
 let competitionTasks = [];
 let messages = [];
+let messagesHydrated = false;
 let chatViewOpen = false;
 let chatHasRendered = false;
 let pendingChatImage = null; // 送信待ちの画像 (data URL)
@@ -101,6 +102,9 @@ document.getElementById("logout-btn").addEventListener("click", async () => {
   localStorage.removeItem(TOKEN_KEY);
   localStorage.removeItem(USER_KEY);
   currentUser = null;
+  messages = [];
+  messagesHydrated = false;
+  idbClearMessages();
   stopPolling();
   document.getElementById("app-shell").classList.add("hidden");
   document.getElementById("whoami").classList.add("hidden");
@@ -289,23 +293,27 @@ async function enterApp() {
 
 async function loadAll() {
   try {
-    const [my, shared, comp, msgs, stats, notifs] = await Promise.all([
+    const [my, shared, comp, stats, notifs] = await Promise.all([
       api("/api/tasks?scope=personal"),
       api("/api/tasks?scope=shared"),
       api("/api/tasks?scope=competition"),
-      api("/api/messages"),
       api("/api/stats"),
       api("/api/notifications"),
     ]);
     myTasks = my.tasks;
     sharedTasks = shared.tasks;
     competitionTasks = comp.tasks;
-    messages = msgs.messages;
     statsData = stats;
     notifications = notifs.notifications;
     unreadCount = notifs.unreadCount;
   } catch (_) {
     return; // 一時的な通信エラーは無視して次回のポーリングに任せる
+  }
+
+  try {
+    await fetchMessages();
+  } catch (_) {
+    // メッセージ取得だけ失敗しても、キャッシュ表示のまま他の描画は続ける
   }
 
   renderMy();
@@ -615,6 +623,92 @@ function wireAnnounceForm() {
 }
 
 // ---------- メッセージ ----------
+// 端末内キャッシュ (IndexedDB): 一度受け取ったメッセージは再送しない
+function idbOpen() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open("tasky-cache", 1);
+    req.onupgradeneeded = () => req.result.createObjectStore("messages", { keyPath: "id" });
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function idbLoadMessages() {
+  try {
+    const db = await idbOpen();
+    return await new Promise((resolve) => {
+      const req = db.transaction("messages", "readonly").objectStore("messages").getAll();
+      req.onsuccess = () => resolve(req.result || []);
+      req.onerror = () => resolve([]);
+    });
+  } catch (_) {
+    return [];
+  }
+}
+
+async function idbSaveMessages(list, minKeepId) {
+  try {
+    const db = await idbOpen();
+    const tx = db.transaction("messages", "readwrite");
+    const store = tx.objectStore("messages");
+    list.forEach((m) => store.put(m));
+    if (minKeepId) {
+      const keysReq = store.getAllKeys();
+      keysReq.onsuccess = () => {
+        (keysReq.result || []).forEach((k) => {
+          if (k < minKeepId) store.delete(k);
+        });
+      };
+    }
+  } catch (_) {
+    // キャッシュが使えなくても本体の動作は続ける
+  }
+}
+
+async function idbClearMessages() {
+  try {
+    const db = await idbOpen();
+    db.transaction("messages", "readwrite").objectStore("messages").clear();
+  } catch (_) {}
+}
+
+// 初回は全件 (最新300件)、2回目以降は新しい分だけを取得する
+async function fetchMessages() {
+  if (!messagesHydrated) {
+    messagesHydrated = true;
+    const cached = await idbLoadMessages();
+    if (cached.length && messages.length === 0) {
+      messages = cached.sort((a, b) => a.id - b.id);
+    }
+  }
+  const lastId = messages.length ? messages[messages.length - 1].id : 0;
+  if (!lastId) {
+    const msgs = await api("/api/messages");
+    messages = msgs.messages;
+    idbSaveMessages(messages);
+    return;
+  }
+  const data = await api("/api/messages?since_id=" + lastId);
+  if (Array.isArray(data.reads)) {
+    const readMap = new Map(data.reads.map((r) => [r.id, r.read_at]));
+    messages = messages.map((m) =>
+      readMap.has(m.id) && !m.read_at ? { ...m, read_at: readMap.get(m.id) } : m
+    );
+  }
+  const fresh = (data.messages || []).filter((m) => m.id > lastId);
+  if (fresh.length >= 300) {
+    // 差分が大きすぎる場合は取りこぼしを避けて全件取り直す
+    const msgs = await api("/api/messages");
+    messages = msgs.messages;
+    idbSaveMessages(messages, messages.length ? messages[0].id : 0);
+    return;
+  }
+  if (fresh.length) {
+    messages = [...messages, ...fresh].slice(-300);
+    idbSaveMessages(fresh, messages.length ? messages[0].id : 0);
+  }
+}
+
 function scrollChatToBottom() {
   const container = document.getElementById("chat-messages");
   if (container) container.scrollTop = container.scrollHeight;

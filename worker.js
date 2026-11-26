@@ -649,6 +649,29 @@ async function handleRequest(request, env) {
     }
 
     if (path === "/api/messages" && method === "GET") {
+      const sinceId = Number(url.searchParams.get("since_id") || 0);
+      if (sinceId > 0) {
+        // 差分取得: 前回取得した最後のidより新しいものだけを返す (通信量削減)
+        const rows = await env.DB.prepare(
+          `SELECT messages.*, users.display_name as sender_name
+           FROM messages JOIN users ON users.id = messages.sender_id
+           WHERE messages.id > ?
+           ORDER BY messages.id ASC
+           LIMIT 300`
+        )
+          .bind(sinceId)
+          .all();
+        // 既読状態は変わりうるので、自分の最新メッセージの read_at だけ別枠で返す
+        const reads = await env.DB.prepare(
+          `SELECT id, read_at FROM messages
+           WHERE sender_id = ? AND read_at IS NOT NULL
+           ORDER BY id DESC
+           LIMIT 300`
+        )
+          .bind(me.id)
+          .all();
+        return json({ messages: rows.results, reads: reads.results }, 200, origin);
+      }
       // 最新の300件を取ってから古い順に並べ直す (単にASC+LIMITだと古い300件で固定され、新着が見えなくなる)
       const rows = await env.DB.prepare(
         `SELECT * FROM (
