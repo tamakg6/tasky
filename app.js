@@ -1,5 +1,5 @@
 const API_BASE = window.API_BASE;
-const APP_VERSION = "2.6.0";
+const APP_VERSION = "2.6.1";
 const TOKEN_KEY = "ledger_token";
 const USER_KEY = "ledger_user";
 const POLL_INTERVAL_MS = 20000;
@@ -665,6 +665,11 @@ async function idbSaveMessages(list, minKeepId) {
   }
 }
 
+async function idbReplaceMessages(list) {
+  await idbClearMessages();
+  await idbSaveMessages(list);
+}
+
 async function idbClearMessages() {
   try {
     const db = await idbOpen();
@@ -688,7 +693,18 @@ async function fetchMessages() {
     idbSaveMessages(messages);
     return;
   }
-  const data = await api("/api/messages?since_id=" + lastId);
+  const data = await api("/api/messages?since_id=" + lastId + "&from_id=" + messages[0].id);
+  // 整合性チェック: 手元のキャッシュの件数とID合計がサーバーと食い違ったら全件取り直す
+  if (data.sync) {
+    const held = messages.filter((m) => m.id >= data.sync.from_id && m.id <= data.sync.to_id);
+    const heldSum = held.reduce((a, m) => a + m.id, 0);
+    if (held.length !== data.sync.count || heldSum !== data.sync.sum) {
+      const msgs = await api("/api/messages");
+      messages = msgs.messages;
+      idbReplaceMessages(messages);
+      return;
+    }
+  }
   if (Array.isArray(data.reads)) {
     const readMap = new Map(data.reads.map((r) => [r.id, r.read_at]));
     messages = messages.map((m) =>
@@ -700,7 +716,7 @@ async function fetchMessages() {
     // 差分が大きすぎる場合は取りこぼしを避けて全件取り直す
     const msgs = await api("/api/messages");
     messages = msgs.messages;
-    idbSaveMessages(messages, messages.length ? messages[0].id : 0);
+    idbReplaceMessages(messages);
     return;
   }
   if (fresh.length) {

@@ -670,7 +670,18 @@ async function handleRequest(request, env) {
         )
           .bind(me.id)
           .all();
-        return json({ messages: rows.results, reads: reads.results }, 200, origin);
+        // 整合性チェック用: クライアントが持っている範囲 (from_id〜since_id) の件数とID合計
+        let sync = null;
+        const fromId = Number(url.searchParams.get("from_id") || 0);
+        if (fromId > 0 && fromId <= sinceId) {
+          const agg = await env.DB.prepare(
+            `SELECT COUNT(*) AS c, COALESCE(SUM(id), 0) AS s FROM messages WHERE id BETWEEN ? AND ?`
+          )
+            .bind(fromId, sinceId)
+            .first();
+          if (agg) sync = { from_id: fromId, to_id: sinceId, count: agg.c, sum: agg.s };
+        }
+        return json({ messages: rows.results, reads: reads.results, sync }, 200, origin);
       }
       // 最新の300件を取ってから古い順に並べ直す (単にASC+LIMITだと古い300件で固定され、新着が見えなくなる)
       const rows = await env.DB.prepare(
