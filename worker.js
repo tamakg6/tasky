@@ -649,11 +649,14 @@ async function handleRequest(request, env) {
     }
 
     if (path === "/api/messages" && method === "GET") {
+      // 最新の300件を取ってから古い順に並べ直す (単にASC+LIMITだと古い300件で固定され、新着が見えなくなる)
       const rows = await env.DB.prepare(
-        `SELECT messages.*, users.display_name as sender_name
-         FROM messages JOIN users ON users.id = messages.sender_id
-         ORDER BY messages.created_at ASC, messages.id ASC
-         LIMIT 300`
+        `SELECT * FROM (
+           SELECT messages.*, users.display_name as sender_name
+           FROM messages JOIN users ON users.id = messages.sender_id
+           ORDER BY messages.created_at DESC, messages.id DESC
+           LIMIT 300
+         ) ORDER BY created_at ASC, id ASC`
       ).all();
       return json({ messages: rows.results }, 200, origin);
     }
